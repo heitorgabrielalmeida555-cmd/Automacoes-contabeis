@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Normalizador de Balancete Pro</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            850: '#1f2937',
+                            900: '#111827',
+                            950: '#030712',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- SheetJS -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom Scrollbar for Dark Mode */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; 
+            border-radius: 5px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; 
+        }
+
+        .drag-active {
+            border-color: #60a5fa !important;
+            background-color: rgba(59, 130, 246, 0.1) !important;
+        }
+        
+        /* Fade in animation */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans min-h-screen flex flex-col">
+
+    <!-- Navbar simples -->
+    <nav class="border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-[98%] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 p-2 rounded-lg">
+                        <i data-lucide="file-spreadsheet" class="w-6 h-6 text-white"></i>
+                    </div>
+                    <span class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                        Balancete Clean Pro
+                    </span>
+                </div>
+                <div class="text-xs text-gray-500 hidden sm:block">v2.3 (CSV Fix)</div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow p-4 sm:p-6 fade-in">
+        <div class="max-w-[98%] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Sidebar / Controls -->
+            <div class="lg:col-span-3 space-y-6">
+                
+                <!-- STEP 1: Upload Card -->
+                <div class="bg-gray-900 rounded-xl border border-gray-800 shadow-xl overflow-hidden">
+                    <div class="p-4 border-b border-gray-800 bg-gray-900/50">
+                        <h2 class="text-lg font-semibold flex items-center gap-2 text-blue-400">
+                            <span class="flex items-center justify-center w-6 h-6 rounded-full bg-blue-900/30 text-blue-400 text-xs">1</span>
+                            Importar Arquivo
+                        </h2>
+                    </div>
+                    <div class="p-6">
+                        <div id="drop-zone" class="border-2 border-dashed border-gray-700 rounded-xl p-8 text-center cursor-pointer hover:border-blue-500 hover:bg-gray-800/50 transition-all group">
+                            <!-- ACEITAÇÃO AMPLIADA PARA CSV -->
+                            <input type="file" id="file-input" accept=".xlsx, .xls, .csv, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="hidden">
+                            <div class="flex flex-col items-center justify-center gap-4">
+                                <div class="p-3 bg-gray-800 rounded-full group-hover:scale-110 transition-transform">
+                                    <i data-lucide="upload-cloud" class="w-8 h-8 text-blue-400"></i>
+                                </div>
+                                <div>
+                                    <span class="block text-sm font-medium text-gray-300">Clique ou arraste</span>
+                                    <span class="block text-xs text-gray-500 mt-1 font-mono">.xlsx ou .csv</span>
+                                    <span class="block text-xs text-gray-500 mt-1" id="file-name-display">Nenhum arquivo selecionado</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STEP 2: Settings Card (Initially Disabled) -->
+                <div id="step-config" class="bg-gray-900 rounded-xl border border-gray-800 shadow-xl opacity-50 pointer-events-none transition-all">
+                    <div class="p-4 border-b border-gray-800 bg-gray-900/50 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold flex items-center gap-2 text-purple-400">
+                            <span class="flex items-center justify-center w-6 h-6 rounded-full bg-purple-900/30 text-purple-400 text-xs">2</span>
+                            Configuração
+                        </h2>
+                        <button onclick="resetApp()" class="text-xs text-red-400 hover:text-red-300 transition-colors hidden" id="btn-reset">Limpar</button>
+                    </div>
+                    <div class="p-6 space-y-5">
+                        <!-- Conta -->
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Coluna da Conta</label>
+                            <div class="relative">
+                                <select id="col-account" class="w-full pl-3 pr-10 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none appearance-none cursor-pointer">
+                                    <option value="">Carregue um arquivo...</option>
+                                </select>
+                                <i data-lucide="chevron-down" class="absolute right-3 top-2.5 w-4 h-4 text-gray-500 pointer-events-none"></i>
+                            </div>
+                            <p class="text-[10px] text-gray-500 mt-1">Filtra apenas números e pontos (ex: 1.1.01)</p>
+                        </div>
+
+                        <!-- Grau -->
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Filtro de Grau Máximo</label>
+                            <div class="flex items-center gap-4 bg-gray-800 p-2 rounded-lg border border-gray-700">
+                                <input type="range" id="degree-slider" min="1" max="10" value="5" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                                <span id="degree-value" class="text-lg font-bold text-blue-400 w-8 text-center">5</span>
+                            </div>
+                            <p class="text-[10px] text-gray-500 mt-1">Linhas com hierarquia superior a este valor serão excluídas.</p>
+                        </div>
+
+                        <button onclick="processData()" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 group">
+                            <i data-lucide="zap" class="w-4 h-4 group-hover:scale-110 transition-transform"></i>
+                            Processar Dados
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content / Preview -->
+            <div class="lg:col-span-9 flex flex-col h-full">
+                <div id="preview-card" class="bg-gray-900 rounded-xl border border-gray-800 shadow-xl flex flex-col h-[85vh] relative overflow-hidden">
+                    
+                    <!-- Empty State -->
+                    <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 z-0">
+                        <i data-lucide="table-2" class="w-16 h-16 mb-4 opacity-20"></i>
+                        <p class="text-lg font-medium">Aguardando dados...</p>
+                        <p class="text-sm">Importe uma planilha (Excel ou CSV) para visualizar.</p>
+                    </div>
+
+                    <!-- Toolbar (Hidden initially) -->
+                    <div id="preview-toolbar" class="hidden z-10 p-4 border-b border-gray-800 bg-gray-900/95 backdrop-blur flex justify-between items-center shrink-0">
+                        <div class="flex items-center gap-4">
+                            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                                <i data-lucide="eye" class="w-5 h-5 text-green-400"></i>
+                                Pré-visualização
+                            </h2>
+                            <div class="h-4 w-px bg-gray-700"></div>
+                            <div class="text-sm text-gray-400">
+                                <span id="stats-original" class="text-gray-300 font-mono">0</span> in &rarr; 
+                                <span id="stats-filtered" class="text-green-400 font-mono font-bold">0</span> out
+                            </div>
+                        </div>
+                        <button onclick="downloadExcel()" class="bg-green-600 hover:bg-green-500 text-white text-sm font-bold py-2 px-4 rounded-lg shadow-lg shadow-green-900/20 transition-all flex items-center gap-2">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                            Baixar XLSX
+                        </button>
+                    </div>
+
+                    <!-- Table Container -->
+                    <div id="table-container" class="hidden flex-grow overflow-auto bg-gray-800/30 z-10 relative">
+                        <table class="min-w-full divide-y divide-gray-800 border-separate border-spacing-0">
+                            <thead class="bg-gray-900 sticky top-0 z-20">
+                                <tr id="table-header-row">
+                                    <!-- Dynamic Headers -->
+                                </tr>
+                            </thead>
+                            <tbody id="preview-body" class="bg-gray-900 divide-y divide-gray-800 text-sm font-mono">
+                                <!-- Dynamic Rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Init Icons
+        lucide.createIcons();
+
+        // State
+        let rawData = [];
+        let headers = [];
+        let processedRows = []; // Stores the full processed arrays
+        let accountIndex = -1;
+
+        // DOM Elements
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const stepConfig = document.getElementById('step-config');
+        const btnReset = document.getElementById('btn-reset');
+        const colAccountSelect = document.getElementById('col-account');
+        const degreeSlider = document.getElementById('degree-slider');
+        const degreeValue = document.getElementById('degree-value');
+        const previewToolbar = document.getElementById('preview-toolbar');
+        const tableContainer = document.getElementById('table-container');
+        const emptyState = document.getElementById('empty-state');
+        const previewBody = document.getElementById('preview-body');
+        const tableHeaderRow = document.getElementById('table-header-row');
+
+        // UI Helpers
+        degreeSlider.addEventListener('input', (e) => {
+            degreeValue.textContent = e.target.value;
+        });
+
+        // --- Drag & Drop ---
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-active');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-active');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            fileNameDisplay.textContent = file.name;
+            fileNameDisplay.classList.add('text-white');
+            
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    // Tenta ler como Array (padrão robusto para Excel e CSVs limpos)
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    processWorkbook(workbook);
+                } catch (err) {
+                    console.error("Falha na leitura binária, tentando como texto...", err);
+                    // Fallback: Se falhar (ex: CSV com codificação estranha), tenta ler como texto
+                    const textReader = new FileReader();
+                    textReader.onload = (evt) => {
+                        try {
+                            const workbook = XLSX.read(evt.target.result, { type: 'string' });
+                            processWorkbook(workbook);
+                        } catch (err2) {
+                            alert("Erro ao ler o arquivo. Verifique se é um Excel ou CSV válido.");
+                        }
+                    };
+                    textReader.readAsText(file, 'ISO-8859-1'); // Tenta Latin1 (comum no BR)
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processWorkbook(workbook) {
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Get data as Array of Arrays
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+            if (jsonData.length < 1) {
+                alert("A planilha parece estar vazia.");
+                return;
+            }
+
+            headers = jsonData[0]; // First row is header
+            rawData = jsonData.slice(1); // Rest is data
+
+            populateSelects();
+            
+            // Unlock UI
+            stepConfig.classList.remove('opacity-50', 'pointer-events-none');
+            btnReset.classList.remove('hidden');
+        }
+
+        function populateSelects() {
+            colAccountSelect.innerHTML = '<option value="">Selecione...</option>';
+
+            headers.forEach((header, index) => {
+                const text = header || `Coluna ${index + 1}`; // Fallback for empty headers
+                const option1 = new Option(text, index);
+                
+                // Try auto-detect based on name
+                const lowerText = String(text).toLowerCase();
+                if (lowerText.includes('conta') || lowerText.includes('classif') || lowerText.includes('código')) option1.selected = true;
+
+                colAccountSelect.add(option1);
+            });
+        }
+
+        // --- Normalization Logic ---
+
+        function normalizeAccountString(val) {
+            if (!val && val !== 0) return "";
+            let str = String(val);
+            // Keep only numbers and dots. This automatically filters out letters/symbols.
+            str = str.replace(/[^0-9.]/g, '');
+            // Clean up dots
+            str = str.replace(/\.+/g, '.').replace(/^\./, '').replace(/\.$/, '');
+            return str;
+        }
+
+        function calculateDegree(accountStr) {
+            if (!accountStr) return 0;
+            return accountStr.split('.').length;
+        }
+
+        // --- Core Processing ---
+
+        function processData() {
+            const accIdx = colAccountSelect.value;
+            const maxDegree = parseInt(degreeSlider.value);
+
+            if (accIdx === "") {
+                alert("Selecione a coluna da Conta.");
+                return;
+            }
+
+            accountIndex = parseInt(accIdx);
+            processedRows = [];
+
+            rawData.forEach(row => {
+                // Clone the row to preserve other columns
+                const newRow = [...row];
+
+                // 1. Get and Normalize Account
+                const rawAcc = newRow[accountIndex];
+                const normAcc = normalizeAccountString(rawAcc);
+
+                // Filter Logic:
+                // Se após normalizar não sobrou nada (ex: era uma string "Total do Ativo"),
+                // então ignoramos esta linha.
+                if (!normAcc || normAcc.length === 0) return;
+
+                // 2. Filter Degree
+                const degree = calculateDegree(normAcc);
+                if (degree > maxDegree) return;
+
+                // 3. Update Account in the row (cleaned up version)
+                newRow[accountIndex] = normAcc;
+
+                // Add to results
+                processedRows.push(newRow);
+            });
+
+            renderPreview();
+        }
+
+        function renderPreview() {
+            // Setup UI
+            emptyState.classList.add('hidden');
+            previewToolbar.classList.remove('hidden');
+            tableContainer.classList.remove('hidden');
+
+            document.getElementById('stats-original').textContent = rawData.length;
+            document.getElementById('stats-filtered').textContent = processedRows.length;
+
+            // 1. Render Headers
+            tableHeaderRow.innerHTML = '';
+            headers.forEach((h, i) => {
+                const th = document.createElement('th');
+                th.className = "px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider bg-gray-900 border-b border-gray-700 whitespace-nowrap";
+                
+                // Highlight selected column
+                if (i == accountIndex) th.classList.add('text-blue-400', 'font-bold');
+                
+                th.textContent = h || `Col ${i+1}`;
+                tableHeaderRow.appendChild(th);
+            });
+
+            // 2. Render Rows (Limit to 500 for DOM performance in preview)
+            previewBody.innerHTML = '';
+            const limit = Math.min(processedRows.length, 500);
+
+            for (let i = 0; i < limit; i++) {
+                const row = processedRows[i];
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-800 transition-colors";
+
+                row.forEach((cell, idx) => {
+                    const td = document.createElement('td');
+                    td.className = "px-4 py-2 whitespace-nowrap text-gray-300 border-b border-gray-800";
+                    
+                    // Specific styling for processed column
+                    if (idx == accountIndex) {
+                        td.className += " font-medium text-blue-300";
+                        td.textContent = cell; // Should already be string
+                    } else {
+                        td.textContent = cell;
+                    }
+                    tr.appendChild(td);
+                });
+                previewBody.appendChild(tr);
+            }
+
+            if (processedRows.length > limit) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="${headers.length}" class="px-4 py-4 text-center text-gray-500 italic bg-gray-900/50">... Visualizando ${limit} de ${processedRows.length} linhas. Baixe o arquivo para ver tudo. ...</td>`;
+                previewBody.appendChild(tr);
+            }
+        }
+
+        function downloadExcel() {
+            if (processedRows.length === 0) {
+                alert("Sem dados para baixar.");
+                return;
+            }
+
+            // Combine headers + data
+            const wsData = [headers, ...processedRows];
+            
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+            // Add sheet
+            XLSX.utils.book_append_sheet(wb, ws, "Balancete Normalizado");
+            
+            // Generate filename with timestamp
+            const date = new Date().toISOString().slice(0,10);
+            XLSX.writeFile(wb, `Balancete_Normalizado_${date}.xlsx`);
+        }
+
+        function resetApp() {
+            location.reload();
+        }
+    </script>
+</body>
+</html>
